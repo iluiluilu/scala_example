@@ -30,6 +30,8 @@ COPY target/scala-2.11/scala_example_2.11-0.1.jar /target/
 RUN chmod +x template.sh \
 && mkdir data \
 && chmod -R 777 data/ \
+&& mkdir sparklib \
+&& chmod -R 777 sparklib/ \
 && ls -la
 
 CMD ["./template.sh"]

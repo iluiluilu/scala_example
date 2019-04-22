@@ -9,8 +9,8 @@ if [ -z "$SPARK_APPLICATION_JAR_LOCATION" ]; then
 fi
 
 /usr/spark/bin/spark-submit \
-        --conf spark.driver.extraClassPath=/data/mysql-connector-java-5.1.46.jar \
-        --conf spark.driver.extraClassPath=/data/mysql-connector-java-8.0.12.jar \
+        --conf spark.driver.extraClassPath=/sparklib/mysql-connector-java-5.1.46.jar \
+        --conf spark.driver.extraClassPath=/sparklib/mysql-connector-java-8.0.12.jar \
         --class ${SPARK_APPLICATION_MAIN_CLASS} \
         --master ${SPARK_MASTER_URL} \
         ${SPARK_APPLICATION_JAR_LOCATION} ${SPARK_APPLICATION_ARGS}
