@@ -11,9 +11,9 @@ import org.apache.spark.sql.{SaveMode, SparkSession}
 object Main {
   def main(args: Array[String]): Unit = {
 
-    val loginStr = s"User login: { Zone: sfsak }"
-    val disconnectStr = s"User disconnected: { Zone: sfsak }"
-    val logoutStr = s"User logout: { Zone: sfsak }"
+    val payGw = s"payCardSimGw"
+    val payUssd = "sd.pay.ussdcard.PayCardByUssdActor"
+    val payUssd1 = "\"data\":\"*100*"
 
     Class.forName("com.mysql.jdbc.Driver").newInstance()
     println("done!")
@@ -31,24 +31,22 @@ object Main {
       .headOption
       .getOrElse(DateCfg.init)
 
-    val fileGroup = getFileList(ss, "/data/", dateCfg.start, dateCfg.end, dateCfg.last)
+    val fileGroup = getFileList1(ss, "data/")
     fileGroup.foreach{files => {
 //      val firstFileName = files(0).getName.split("[.]")(2).replace("-", "")
       val logs = files.sortBy(_.getName).map(f => sc.textFile(f.toUri.getPath))
 
-      val sessions = logs.map(_.filter(l => l.contains(loginStr) || l.contains(disconnectStr) | l.contains(logoutStr)))
+      val sessions = logs.map(_.filter(l => l.contains(payGw) || (l.contains(payUssd) && l.contains(payUssd1))))
         .fold(sc.emptyRDD[String])((o1, o2) => o1 ++ o2)
-          .map(l => parseLine(l)).keyBy(_.key).reduceByKey((l1, l2) => {
-        Line(0, Math.max(l1.startTime, l2.startTime), Math.max(l1.endTime, l2.endTime),
-        l1.uid, l1.smfId, l1.smfSession, Math.max(l1.sessionLength, l2.sessionLength))
-      }).map(_._2)
 
-      sessions.toDS().saveToSpark(s"sessions", SaveMode.Append)
+//      sessions.coalesce(1, true).saveAsTextFile("gw")
 
-      files.lastOption.foreach { p =>
-        Seq(dateCfg.copy(last = p.getName.replace("smartfox.log.", ""))).toDS
-          .saveToSpark("date", SaveMode.Overwrite) /// update end and last
-      }
+            sessions.toDS().saveToSpark(s"pay_log", SaveMode.Append)
+//
+//      files.lastOption.foreach { p =>
+//        Seq(dateCfg.copy(last = p.getName.replace("smartfox.log.", ""))).toDS
+//          .saveToSpark("date", SaveMode.Overwrite) /// update end and last
+//      }
     }}
   }
 
@@ -62,7 +60,18 @@ object Main {
     fileList.grouped(8).toList
   }
 
+  def getFileList1(ss: SparkSession, p: String): List[Array[Path]] = {
+    val path = new Path(p)
+    val fs = FileSystem.get(ss.sparkContext.hadoopConfiguration)
+    val fileList = fs.listStatus(path).filter(_.isFile).map(_.getPath)
+      .filter(n => n.getName.startsWith("api.2"))
+      .sortBy(_.getName)
+
+    fileList.grouped(8).toList
+  }
+
   def parseLine(line: String): Line = {
+
     val x = line.split(" [|] ")
     val d = DateTime.parse(s"${x(0)} ${x(1)}", DateTimeFormat.forPattern("dd MMM yyyy HH:mm:ss,SSS"))
     val l = x.last.split(", ")
