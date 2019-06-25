@@ -41,7 +41,7 @@ object DB {
 }
 
 object Cfg {
-  val sparkSqlUrl = "jdbc:mysql://[url]/[db]"
-  val sparkSqlUser = "[username]"
-  val sparkSqlPass = "[pass]"
+  val sparkSqlUrl = "jdbc:mysql://localhost/spark"
+  val sparkSqlUser = "root"
+  val sparkSqlPass = "123456"
 }

@@ -13,7 +13,7 @@ object Main {
 
     val payGw = s"payCardSimGw"
     val payUssd = "sd.pay.ussdcard.PayCardByUssdActor"
-    val payUssd1 = "\"data\":\"*100*"
+    val payUssd1 = "request = *100*"
 
     Class.forName("com.mysql.jdbc.Driver").newInstance()
     println("done!")
@@ -25,11 +25,11 @@ object Main {
     import ss.implicits._
     import DB._
 
-    val dateCfg = ss.readFromSpark("date").select("start", "end", "last")
-      .as[DateCfg]
-      .take(1)
-      .headOption
-      .getOrElse(DateCfg.init)
+//    val dateCfg = ss.readFromSpark("date").select("start", "end", "last")
+//      .as[DateCfg]
+//      .take(1)
+//      .headOption
+//      .getOrElse(DateCfg.init)
 
     val fileGroup = getFileList1(ss, "data/")
     fileGroup.foreach{files => {
@@ -38,6 +38,7 @@ object Main {
 
       val sessions = logs.map(_.filter(l => l.contains(payGw) || (l.contains(payUssd) && l.contains(payUssd1))))
         .fold(sc.emptyRDD[String])((o1, o2) => o1 ++ o2)
+        .map(l => parseLine1(l))
 
 //      sessions.coalesce(1, true).saveAsTextFile("gw")
 
@@ -67,7 +68,7 @@ object Main {
       .filter(n => n.getName.startsWith("api.2"))
       .sortBy(_.getName)
 
-    fileList.grouped(8).toList
+    fileList.grouped(18).toList
   }
 
   def parseLine(line: String): Line = {
@@ -83,12 +84,35 @@ object Main {
     val sessionLength = if (!line.contains("login")) l(5).split(": ").last.toInt else 0
     Line(tpe, if (tpe == 1) d.getMillis else 0, if (tpe != 1) d.getMillis else 0, uid, sId, session, sessionLength)
   }
+
+  def parseLine1(line: String): PayLog = {
+    if (line.contains("sd.pay.ussdcard.PayCardByUssdActor")) {
+
+      //2019-04-25 07:46:32,274 | INFO | sd.pay.ussdcard.PayCardByUssdActor | SDPaySuccessTopic vnd = 20000 && request = *100*110704803961405#;5265895;viettel_8984048000044966354_0;1556153186
+      val arr = line.split(" ")
+      println(line)
+      val amount = arr.slice(3, arr.length - 1).filter(f=> f.contains("000")).head.toInt
+      val infos = arr.last.split(";") // *100*110704803961405#;5265895;viettel_8984048000044966354_0;1556153186
+      val pin = infos.head.replace("*100*", "").replace("#", "")
+      val df = DateTime.parse(s"${arr(0)} ${arr(1)}", DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss,SSS"))
+      PayLog(pin, infos(2).split("_").head, amount, (df.getMillis / 1000).toInt, line, "")
+    } else {
+      val arr = line.split("[|]")
+      val d = arr.last.split("payCardSimGw").last.replace(" ", "").split("-") // 50000-Some(10003852204345)-411547804831118!
+
+      val df = DateTime.parse(s"${arr(0).trim}", DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss,SSS"))
+
+      PayLog(d.last.replace("!", ""), "viettel?", d(0).toInt, (df.getMillis / 1000).toInt, line, d(1).replace("Some(", "").replace(")", ""))
+    }
+  }
 }
 
 
 case class Line(tpe: Int, startTime: Long, endTime: Long, uid: Int, smfId: Int, smfSession: String, sessionLength: Int) {
   def key = s"$uid-$smfId-$smfSession"
 }
+
+case class PayLog(pin: String, provider: String, amount: Int, time: Int, data: String, seri: String)
 
 case class DateCfg(start: String, end: String, last: String)
 
