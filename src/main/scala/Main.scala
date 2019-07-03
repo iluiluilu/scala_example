@@ -11,9 +11,11 @@ import org.apache.spark.sql.{SaveMode, SparkSession}
 object Main {
   def main(args: Array[String]): Unit = {
 
-    val payGw = s"payCardSimGw"
-    val payUssd = "sd.pay.ussdcard.PayCardByUssdActor"
-    val payUssd1 = "request = *100*"
+    val arenaPlayZone = " 9_"
+    val initArenaPlay = "initPlayers"
+    val finishArenaPlay = "ScoreHisCmd"
+//    val tourPlayZone = " 8_"
+//    val finishTourPlay = "ScoreHisCmd"
 
     Class.forName("com.mysql.jdbc.Driver").newInstance()
     println("done!")
@@ -31,19 +33,21 @@ object Main {
 //      .headOption
 //      .getOrElse(DateCfg.init)
 
-    val fileGroup = getFileList1(ss, "data/")
+    val fileGroup = getFileList(ss, "data/", "2019-06-24-00", "2019-07-30-00", "2019-06-24-00")
     fileGroup.foreach{files => {
 //      val firstFileName = files(0).getName.split("[.]")(2).replace("-", "")
       val logs = files.sortBy(_.getName).map(f => sc.textFile(f.toUri.getPath))
 
-      val sessions = logs.map(_.filter(l => l.contains(payGw) || (l.contains(payUssd) && l.contains(payUssd1))))
+      val sessions = logs.map(_.filter(l => (l.contains(arenaPlayZone) && l.contains(finishArenaPlay))))
         .fold(sc.emptyRDD[String])((o1, o2) => o1 ++ o2)
-        .map(l => parseLine1(l))
+        .map(l => parseTour(l))
+      val z = sessions.flatMap(f=>f).collect().distinct
+          println(z.length)
 
 //      sessions.coalesce(1, true).saveAsTextFile("gw")
 
-            sessions.toDS().saveToSpark(s"pay_log", SaveMode.Append)
-//
+//            sessions.toDS().saveToSpark(s"pay_log", SaveMode.Append)
+
 //      files.lastOption.foreach { p =>
 //        Seq(dateCfg.copy(last = p.getName.replace("smartfox.log.", ""))).toDS
 //          .saveToSpark("date", SaveMode.Overwrite) /// update end and last
@@ -105,6 +109,32 @@ object Main {
       PayLog(d.last.replace("!", ""), "viettel?", d(0).toInt, (df.getMillis / 1000).toInt, line, d(1).replace("Some(", "").replace(")", ""))
     }
   }
+
+  def parseArena(line: String) : Seq[Int] = {
+    val arr = line.split(" [|] ").last.split(" ")
+    val room = arr(0)
+    val uids = arr(2).split(",").map(_.toInt).toSeq
+//    println(arr.last)
+    ArenaUser(uids)
+    uids
+  }
+
+  def parseTour(line: String) = {
+//    val x = s"""-> ScoreHisCmd 8_0_39 1402548,3152806,5528,1109480,4596217 : {"c":[["traibepzai","Nhất Cửu Thất Cửu","LienPhuong","phongpham79"],[6,-2,-2,-2],"l1ptnogb_1prb",[15,-5,-5,-5],"l1ptnolw_1prb",[-5,-5,15,-5],"l1ptnoqp_1prb",[-12,-12,-12,36],"l1ptnot7_1prb",[9,-3,-3,-3],"l1ptnoxl_1prb",[-4,-4,12,-4],"l1ptnp10_1prb",[-11,33,-11,-11],"l1ptnp58_1prb",[-3,9,-3,-3],"l1ptnp8v_1prb",[-5,15,-5,-5],"l1ptnpeg_1prb",[-3,9,-3,-3],"l1ptnpi7_1prb",[-6,18,-6,-6],"l1ptnpnn_1prb",[45,-15,-15,-15],"l1ptnpqh_1prb",[15,-5,-5,-5],"l1ptnpvh_1prb",[-4,-4,-4,12],"l1ptnpzc_1prb",[-16,-16,-16,48],"l1ptnq4s_1prb",[-51,17,17,17],"l1ptnq8c_1prb",[45,-15,-15,-15],"l1ptnqdz_1prb",[-2,-2,-2,6],"l1ptnqhw_1prb",[-5,15,-5,-5],"l1ptnqlq_1prb",[12,-4,-4,-4],"l1ptnqph_1prb",[-16,48,-16,-16],"l1ptnqum_1prb",[-3,-3,-3,9],"l1ptnqzw_1prb",[-4,-4,12,-4],"l1ptnr53_1prb",[-5,15,-5,-5],"l1ptnrb6_1prb",[-51,17,17,17],"l1ptnrer_1prb",[45,-15,-15,-15],"l1ptnrjf_1prb",[-3,9,-3,-3],"l1ptnrmy_1prb",[-3,-3,-3,9],"l1ptnrqb_1prb",[-16,-16,-16,48],"l1ptnrv9_1prb",[-2,-2,6,-2],"l1ptns09_1prb",[-38,70,-98,66]],"u":[1402548,4596217,3152806,5528],"f":2,"o":[3152806,1402548,5528,4596217]}"""
+    val y = line.split(" [|] ").last.split(s""" : """)
+    val z = y(0)
+    val z1 = y(1)
+    val room = z.split(" ")(2)
+    //val uid = z.split(" ")(3).split(",").map(_.toInt)
+    val z2 = z1.split(""","u":""")
+    val lastScore = z2.head.split("\",").last.replace("[","").replace("]", "").split(",").map(_.toInt)
+    val uid = z2.last.split("\"o\":").last.replace("[","").replace("]","").replace("}","").split(",").map(_.toInt)
+    val username =  z2.head.split("\\],\\[").head.replace("{\"c\":[[", "").split(",")
+    val mapScore = lastScore.zipWithIndex.map{case (value, index) => value -> (uid(index), username(index))}.maxBy(_._1)
+
+//    s"$room,${mapScore._1},${mapScore._2._1},${mapScore._2._2}"
+    uid
+  }
 }
 
 
@@ -113,6 +143,8 @@ case class Line(tpe: Int, startTime: Long, endTime: Long, uid: Int, smfId: Int, 
 }
 
 case class PayLog(pin: String, provider: String, amount: Int, time: Int, data: String, seri: String)
+
+case class ArenaUser(uids: Seq[Int])
 
 case class DateCfg(start: String, end: String, last: String)
 
