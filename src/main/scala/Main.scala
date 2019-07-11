@@ -11,9 +11,9 @@ import org.apache.spark.sql.{SaveMode, SparkSession}
 object Main {
   def main(args: Array[String]): Unit = {
 
-    val arenaPlayZone = " 9_"
-    val initArenaPlay = "initPlayers"
-    val finishArenaPlay = "ScoreHisCmd"
+    val arenaPlayZone = " 7_"
+    val initTourPosition = "initPosition uids"
+    val finishTour = "ScoreHisCmd"
 //    val tourPlayZone = " 8_"
 //    val finishTourPlay = "ScoreHisCmd"
 
@@ -38,13 +38,14 @@ object Main {
 //      val firstFileName = files(0).getName.split("[.]")(2).replace("-", "")
       val logs = files.sortBy(_.getName).map(f => sc.textFile(f.toUri.getPath))
 
-      val sessions = logs.map(_.filter(l => (l.contains(arenaPlayZone) && l.contains(finishArenaPlay))))
+      val sessions = logs.map(_.filter(l => (l.contains(initTourPosition) && l.contains(arenaPlayZone)) || (l.contains(arenaPlayZone) && l.contains(finishTour))))
         .fold(sc.emptyRDD[String])((o1, o2) => o1 ++ o2)
         .map(l => parseTour(l))
-      val z = sessions.flatMap(f=>f).collect().distinct
-          println(z.length)
+//      val z = sessions.flatMap(f=>f).collect().distinct
+//          println(z.length)
 
-//      sessions.coalesce(1, true).saveAsTextFile("gw")
+      sessions.filter(_.startTime > 0).coalesce(1, true).saveAsTextFile("ts")
+      sessions.filter(_.endTime > 0).coalesce(1, true).saveAsTextFile("tf")
 
 //            sessions.toDS().saveToSpark(s"pay_log", SaveMode.Append)
 
@@ -110,16 +111,8 @@ object Main {
     }
   }
 
-  def parseArena(line: String) : Seq[Int] = {
-    val arr = line.split(" [|] ").last.split(" ")
-    val room = arr(0)
-    val uids = arr(2).split(",").map(_.toInt).toSeq
-//    println(arr.last)
-    ArenaUser(uids)
-    uids
-  }
 
-  def parseTour(line: String) = {
+  def parseArena(line: String) = {
 //    val x = s"""-> ScoreHisCmd 8_0_39 1402548,3152806,5528,1109480,4596217 : {"c":[["traibepzai","Nhất Cửu Thất Cửu","LienPhuong","phongpham79"],[6,-2,-2,-2],"l1ptnogb_1prb",[15,-5,-5,-5],"l1ptnolw_1prb",[-5,-5,15,-5],"l1ptnoqp_1prb",[-12,-12,-12,36],"l1ptnot7_1prb",[9,-3,-3,-3],"l1ptnoxl_1prb",[-4,-4,12,-4],"l1ptnp10_1prb",[-11,33,-11,-11],"l1ptnp58_1prb",[-3,9,-3,-3],"l1ptnp8v_1prb",[-5,15,-5,-5],"l1ptnpeg_1prb",[-3,9,-3,-3],"l1ptnpi7_1prb",[-6,18,-6,-6],"l1ptnpnn_1prb",[45,-15,-15,-15],"l1ptnpqh_1prb",[15,-5,-5,-5],"l1ptnpvh_1prb",[-4,-4,-4,12],"l1ptnpzc_1prb",[-16,-16,-16,48],"l1ptnq4s_1prb",[-51,17,17,17],"l1ptnq8c_1prb",[45,-15,-15,-15],"l1ptnqdz_1prb",[-2,-2,-2,6],"l1ptnqhw_1prb",[-5,15,-5,-5],"l1ptnqlq_1prb",[12,-4,-4,-4],"l1ptnqph_1prb",[-16,48,-16,-16],"l1ptnqum_1prb",[-3,-3,-3,9],"l1ptnqzw_1prb",[-4,-4,12,-4],"l1ptnr53_1prb",[-5,15,-5,-5],"l1ptnrb6_1prb",[-51,17,17,17],"l1ptnrer_1prb",[45,-15,-15,-15],"l1ptnrjf_1prb",[-3,9,-3,-3],"l1ptnrmy_1prb",[-3,-3,-3,9],"l1ptnrqb_1prb",[-16,-16,-16,48],"l1ptnrv9_1prb",[-2,-2,6,-2],"l1ptns09_1prb",[-38,70,-98,66]],"u":[1402548,4596217,3152806,5528],"f":2,"o":[3152806,1402548,5528,4596217]}"""
     val y = line.split(" [|] ").last.split(s""" : """)
     val z = y(0)
@@ -132,12 +125,47 @@ object Main {
     val username =  z2.head.split("\\],\\[").head.replace("{\"c\":[[", "").split(",")
     val mapScore = lastScore.zipWithIndex.map{case (value, index) => value -> (uid(index), username(index))}.maxBy(_._1)
 
-//    s"$room,${mapScore._1},${mapScore._2._1},${mapScore._2._2}"
     uid
+  }
+
+  def parseTour(line: String) = {
+    if (line.contains("initPosition uids")) {
+      parseInitPosition(line)
+    } else {
+      parseFinish(line)
+    }
+  }
+
+  def parseInitPosition(line: String) = {
+    val arrs = line.split(" [|] ")
+    val time = parseDate(s"${arrs(0).trim} ${arrs(1).trim}")
+    val room = arrs.last.trim.split(" ").head
+    val uids = arrs.last.trim.split(" ").last.split(",").map(_.toInt)
+    val uid2Str = uids.mkString(",")
+    val key = s"${room}_${uid2Str}"
+    TourData(1, uids, time.toInt, 0, key)
+  }
+
+  def parseFinish(line: String) = {
+    val data = line.split("ScoreHisCmd").last.trim
+    val h = line.split("ScoreHisCmd").head.split(" [|] ")
+    val time = parseDate(s"${h(0).trim} ${h(1).trim}")
+    val ds = data.split(" : ")
+    val d2 = ds.last.split(",\"u\":")
+    val score = d2.head.split("\",\\[").last.replace("]", "").split(",").map(_.toInt)
+    val uids = d2.last.split(",\"o\":\\[").last.replace("]}", "").split(",").map(_.toInt)
+    val room = ds.head.split(" ").head
+    val uid2Str = uids.mkString(",")
+    val key = s"${room}_${uid2Str}"
+    TourData(1, uids, 0, time.toInt, key)
+  }
+
+  def parseDate(d: String) = {
+    DateTime.parse(d, DateTimeFormat.forPattern("dd MMM yyyy HH:mm:ss,SSS")).getMillis/1000
   }
 }
 
-
+case class TourData(tpe:Int, uids:Seq[Int], startTime: Int, endTime: Int, key: String)
 case class Line(tpe: Int, startTime: Long, endTime: Long, uid: Int, smfId: Int, smfSession: String, sessionLength: Int) {
   def key = s"$uid-$smfId-$smfSession"
 }
