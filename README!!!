@@ -1,3 +1,10 @@
+# Lấy danh sách thi đình vòng loại
+1. SSH vào game server, lấy log từ 20h->0h của ngày thi Đình vòng loại, copy vào thư mục data (nếu chưa có thì tạo)
+2. Tại dòng 36 của file Main.scala: sửa đường dẫn của thư mục chưa log, và khoảng thời gian lấy ra log file để đọc, xử lý
+3. Tại dòng 44, sửa folder sẽ xuất dữ liệu ra
+5. Chạy file main để xử lý và lấy dữ liệu
+
+# Build docker image and run locally
 1. build project -> sbt package
 2. build docker image: docker build -t $MYNAME/spark:latest .
 3. attach image and run: docker run --rm -it --name spark-master --hostname spark-master -p 7077:7077 -p 8080:8080 -v [data]:/data:ro $MYNAME/spark:latest

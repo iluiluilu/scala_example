@@ -11,7 +11,7 @@ import org.apache.spark.sql.{SaveMode, SparkSession}
 object Main {
   def main(args: Array[String]): Unit = {
 
-    val arenaPlayZone = " 7_"
+    val arenaPlayZone = " 8_"
     val initTourPosition = "initPosition uids"
     val finishTour = "ScoreHisCmd"
 //    val tourPlayZone = " 8_"
@@ -38,20 +38,10 @@ object Main {
 //      val firstFileName = files(0).getName.split("[.]")(2).replace("-", "")
       val logs = files.sortBy(_.getName).map(f => sc.textFile(f.toUri.getPath))
 
-      val sessions = logs.map(_.filter(l => (l.contains(initTourPosition) && l.contains(arenaPlayZone)) || (l.contains(arenaPlayZone) && l.contains(finishTour))))
+      val sessions = logs.map(_.filter(l => (l.contains(arenaPlayZone) && l.contains(finishTour))))
         .fold(sc.emptyRDD[String])((o1, o2) => o1 ++ o2)
-        .map(l => parseTour(l))
-//      val z = sessions.flatMap(f=>f).collect().distinct
-//          println(z.length)
-
-      sessions.filter(_.startTime > 0).coalesce(1, true).saveAsTextFile("ts")
-      sessions.filter(_.endTime > 0).coalesce(1, true).saveAsTextFile("tf")
-
-//            sessions.toDS().saveToSpark(s"pay_log", SaveMode.Append)
-
-//      files.lastOption.foreach { p =>
-//        Seq(dateCfg.copy(last = p.getName.replace("smartfox.log.", ""))).toDS
-//          .saveToSpark("date", SaveMode.Overwrite) /// update end and last
+        .map(l => parseArena(l)).sortBy(-_._1)
+      sessions.coalesce(1, true).saveAsTextFile("dinh1")
 //      }
     }}
   }
@@ -123,9 +113,9 @@ object Main {
     val lastScore = z2.head.split("\",").last.replace("[","").replace("]", "").split(",").map(_.toInt)
     val uid = z2.last.split("\"o\":").last.replace("[","").replace("]","").replace("}","").split(",").map(_.toInt)
     val username =  z2.head.split("\\],\\[").head.replace("{\"c\":[[", "").split(",")
-    val mapScore = lastScore.zipWithIndex.map{case (value, index) => value -> (uid(index), username(index))}.maxBy(_._1)
-
-    uid
+    val mapScore = lastScore.zipWithIndex.map{case (value, index) => (value, uid(index), username(index))}.maxBy(_._1)
+    mapScore
+    // uid
   }
 
   def parseTour(line: String) = {
