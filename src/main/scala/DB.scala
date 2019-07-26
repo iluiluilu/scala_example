@@ -1,8 +1,6 @@
 import org.apache.spark.sql.{Dataset, SaveMode, SparkSession}
 
 object DB {
-
-
   implicit class ExWriteDb[T](wr: Dataset[T]){
     def saveToSpark(table: String, mode: SaveMode = SaveMode.Overwrite) = wr
       .write
@@ -41,7 +39,7 @@ object DB {
 }
 
 object Cfg {
-  val sparkSqlUrl = "jdbc:mysql://[url]/[db]"
-  val sparkSqlUser = "[username]"
-  val sparkSqlPass = "[pass]"
+  val sparkSqlUrl = scala.util.Properties.envOrElse("SPARK_URL", "")
+  val sparkSqlUser = scala.util.Properties.envOrElse("SPARK_USER", "")
+  val sparkSqlPass = scala.util.Properties.envOrElse("SPARK_PASS", "")
 }
